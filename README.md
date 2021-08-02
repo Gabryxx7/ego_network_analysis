@@ -18,7 +18,7 @@ A good way to think about constraints: If we consider a person X that tend to on
 
 From Burt's Formulation we can define the constraint calculation as:
 
-<img src="https://latex.codecogs.com/png.image?\dpi{110}&space;\bg_white&space;\color{black}c_{i}&space;=&space;\sum_{j&space;\in&space;N(i)\mathbin{/}\{v\}}{z_{ij}}&space;" title="\bg_white \color{black}c_{i} = \sum_{j \in N(i)\mathbin{/}\{v\}}{z_{ij}} " />
+<img src="https://latex.codecogs.com/png.image?\dpi{110}&space;\bg_white&space;\bg_white&space;\color{black}c_{i}&space;=&space;\sum_{j&space;\in&space;N(i)\mathbin{/}\{i\}}{c_{ij}}" title="\bg_white \bg_white \color{black}c_{i} = \sum_{j \in N(i)\mathbin{/}\{i\}}{c_{ij}}" />
 
 Where the constraint C<sub>ij</sub> is the constraint between the node i and the node j:
 
