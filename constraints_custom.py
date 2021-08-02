@@ -1,3 +1,6 @@
+import random
+import networkx as nx
+
 """
 Author Gabryxx7
 I was not sure the networkx cosntraints() function was returning what I needed so I re-implemented it myself
@@ -64,7 +67,7 @@ def burt_node_constraint(G, i, j, weight_attr=None):
             fraction = fractioniq + "*" + fractionqj
             debug_str += f"P.{i}{q}*P.{q}{j}={fraction}={ziq*zqj} + "
     debug_str += " )"
-    print(f"C.{i}{j}={(direct + indirect) ** 2 }= {debug_str}")
+    # print(f"C.{i}{j}={(direct + indirect) ** 2 }= {debug_str}")
     return (direct + indirect) ** 2 
     
 def custom_constraints(G, nodes=None, weight_attr=None):
@@ -79,7 +82,7 @@ def custom_constraints(G, nodes=None, weight_attr=None):
             constraints[i] += burt_node_constraint(G, i, j, weight_attr)
             neighborhood[i] += str(j)+", "
         neighborhood[i] += "]"
-        print(f"Neighborhood of {i}: {neighborhood[i]}")
+        # print(f"Neighborhood of {i}: {neighborhood[i]}")
 #         for j in G.nodes:
 #             if i != j:
 #                 constraints[i] += local_constraint(G, i, j)

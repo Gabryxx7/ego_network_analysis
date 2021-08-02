@@ -27,6 +27,10 @@ import utils
 import backbone
 import base64
 import random
+from Crypto.Cipher import AES
+from Crypto.Util.strxor import strxor
+from Crypto import Random
+from itertools import cycle
 
 class EgoNetworkAnalyzer():
 
@@ -59,7 +63,7 @@ class EgoNetworkAnalyzer():
             full_network = backbone.disparity_filter(full_network, weight=self.weight_col)
             full_network = nx.Graph([(u, v, d) for u, v, d in full_network.edges(data=True) if d['alpha'] < alpha_threshold])    
             self.networks_data[self.full_network_bb_key] = {}        
-            self.networks_data[self.full_network_bb_key]["network"] = self.full_network
+            self.networks_data[self.full_network_bb_key]["network"] = full_network
             self.networks_data[self.full_network_bb_key]["total_nodes"] = full_network.number_of_nodes()
             self.networks_data[self.full_network_bb_key]["total_edges"] = full_network.number_of_edges()
             self.networks_data[self.full_network_bb_key]["alpha_threshold"] = alpha_threshold
@@ -67,22 +71,66 @@ class EgoNetworkAnalyzer():
             print(f"Backboned network: nodes = {self.networks_data[self.full_network_key]['total_nodes']}, edges = {self.networks_data[self.full_network_key]['total_edges']}")
 
         return self.networks_data
-
-    def encrypt_df(self, df, cols_to_encrypt, key):
-        df[cols_to_encrypt] = df[cols_to_encrypt].applymap(lambda x: self.encrypt(key,x))
-        return df
     
-    def decrypt_df(self, df, cols_to_decrypt, key):
-        df[cols_to_decrypt] = df[cols_to_decrypt].applymap(lambda x: self.decrypt(key,x))
+    @staticmethod
+    def encrypt_df(df, key, cols_to_encrypt=None, method=0):
+        if cols_to_encrypt is None:
+            cols_to_encrypt = list(df.select_dtypes(['O']).columns)
+        if method <= 0:
+            df[cols_to_encrypt] = df[cols_to_encrypt].applymap(lambda x: EgoNetworkAnalyzer.encrypt_xor(x, key))
+        else:
+            df[cols_to_encrypt] = df[cols_to_encrypt].applymap(lambda x: EgoNetworkAnalyzer.encrypt_AES(x, key))
         return df
-        
-    def encrypt(self, key, plaintext):
-        cipher = XOR.new(key)
-        return base64.b64encode(cipher.encrypt(plaintext))
 
-    def decrypt(self, key, ciphertext):
-        cipher = XOR.new(key)
-        return cipher.decrypt(base64.b64decode(ciphertext))
+    @staticmethod
+    def decrypt_df(df, key, cols_to_decrypt=None, method=0):
+        if cols_to_decrypt is None:
+            cols_to_decrypt = list(df.select_dtypes(['O']).columns)
+        
+        if method <= 0:
+            df[cols_to_decrypt] = df[cols_to_decrypt].applymap(lambda x: EgoNetworkAnalyzer.decrypt_xor(x, key))
+        else:
+            df[cols_to_decrypt] = df[cols_to_decrypt].applymap(lambda x: EgoNetworkAnalyzer.decrypt_AES(x, key))
+        return df
+
+    @staticmethod
+    def pad(s):
+        s = str(s)
+        bs = AES.block_size
+        return s + (bs - len(s) % bs) * chr(bs - len(s) % bs)
+
+    @staticmethod
+    def unpad(s):
+        return s[:-ord(s[len(s)-1:])]
+
+    @staticmethod
+    def xor(message, key):
+        return ''.join(chr(ord(c)^ord(k)) for c,k in zip(message, cycle(key)))
+        
+    @staticmethod
+    def encrypt_xor(raw, key):
+        xored = EgoNetworkAnalyzer.xor(raw, key).encode('utf-8')
+        return str(base64.encodestring(xored).strip())[2:][:-1]
+
+    @staticmethod
+    def decrypt_xor(enc, key):
+        enc = base64.decodestring(enc.encode('utf-8')).decode('utf-8')
+        xored = EgoNetworkAnalyzer.xor(enc, key)
+        return xored
+
+    @staticmethod
+    def encrypt_AES(raw, key):
+        raw = EgoNetworkAnalyzer.pad(raw).encode('utf-8')
+        iv = Random.new().read(AES.block_size)
+        cipher = AES.new(key.encode('utf-8'), AES.MODE_CBC, iv)
+        return base64.b64encode( iv + cipher.encrypt( raw ) ) 
+
+    @staticmethod
+    def decrypt_AES(enc, key):
+        enc = base64.b64decode(enc)
+        iv = enc[:AES.block_size]
+        cipher = AES.new(key.encode('utf-8'), AES.MODE_CBC, iv)
+        return EgoNetworkAnalyzer.unpad(cipher.decrypt( enc[16:] ))
 
     def print_nodes_list(self, G):
         print(self.get_nodes_string(G))
@@ -95,7 +143,8 @@ class EgoNetworkAnalyzer():
             i +=1    
         return string
             
-    def get_bidirectional_connections(self, G):
+    @staticmethod
+    def get_bidirectional_connections(G):
         biconnections = set()
         for u, v in G.edges():
             if u > v:  # Avoid duplicates, such as (1, 2) and (2, 1)
@@ -104,7 +153,8 @@ class EgoNetworkAnalyzer():
                 biconnections.add((u, v))
         return biconnections
     
-    def have_bidirectional_relationship(self, G, node1, node2):
+    @staticmethod
+    def have_bidirectional_relationship(G, node1, node2):
         return G.has_edge(node1, node2) and G.has_edge(node2, node1)
 
     def print_bidirectional_connections(self, G):
@@ -129,13 +179,12 @@ class EgoNetworkAnalyzer():
         if self.weight_col is None:
             ego_net["network"] = nx.ego_graph(full_network, ego_node, undirected=True, radius=radius)
         else:
-            ego_net["network"] = nx.ego_graph(full_network, ego_node, undirected=True, radius=radius, distance=weight_col)
+            ego_net["network"] = nx.ego_graph(full_network, ego_node, undirected=True, radius=radius, distance=self.weight_col)
         ego_net["total_nodes"] = ego_net["network"].number_of_nodes()
         ego_net["total_edges"] = ego_net["network"].number_of_edges()
-        if self.weight_col is None:
-            ego_net["ego_node_degree"] = ego_net["network"].degree(ego_node)
-        else:
-            ego_net["ego_node_degree"] = ego_net["network"].degree(ego_node, weight=weight_col)
+        ego_net["ego_node_degree"] = ego_net["network"].degree(ego_node)
+        if self.weight_col is not None:
+            ego_net["ego_node_degree_weighted"] = ego_net["network"].degree(ego_node, weight=self.weight_col)
         return ego_net
 
     def get_all_ego_networks_data(self, radius=2):
@@ -240,19 +289,20 @@ class EgoNetworkAnalyzer():
             ego_data = self.networks_data[ego_node]
         else:
             if self.backboned:
-                ego_data = self.get_ego_network_data(self.networks_data[self.full_network_bb_key]["network"], ego_node)  
+                ego_network = self.networks_data[self.full_network_bb_key]["network"]
             else:
-                ego_data = self.get_ego_network_data(self.networks_data[self.full_network_key]["network"], ego_node)                
-        
+                ego_network = self.networks_data[self.full_network_key]["network"]
+
+        ego_data = self.get_ego_network_data(ego_network, ego_node)
         ties = self.calculate_simmelian_ties(ego_data)
         ego_data.update(ties)
         constraints = self.calculate_constraints(ego_data)
         ego_data.update(constraints)
         self.networks_data[ego_node] = ego_data            
         print(f'\n {utils.formatted_now(sepDate="-", sepTime=":", sep=" ")}\t COMPLETED ego network metrics calculation for \t {ego_node}')
-        return self.networks_data
+        return ego_data
 
-    def calculate_ego_networks_metrics(self, backboning=False, multi_thread=True, n_threads=23, alpha_threshold=0.04):
+    def calculate_ego_networks_metrics(self, backboning=False, multi_thread=True, n_threads=23, alpha_threshold=0.04, limit=-1):
         if self.networks_data is None:
             print(f'{utils.formatted_now(sepDate="-", sepTime=":", sep=" ")}\t Calculating full network first...')
             self.make_full_network(backboning, alpha_threshold)           
@@ -262,7 +312,9 @@ class EgoNetworkAnalyzer():
             network = self.networks_data[self.full_network_bb_key]["network"]
         else:
             network = self.networks_data[self.full_network_key]["network"]
-        node_list = network.nodes
+        node_list = list(network.nodes)
+        if limit > 0:
+            node_list = node_list[0:limit]
         num_tasks = len(node_list)
 
         print(f'{utils.formatted_now(sepDate="-", sepTime=":", sep=" ")}\t Starting {"MULTI" if multi_thread else "SINGLE"} threaded ego networks metrics calculation, backboned? {self.backboned}')
@@ -283,4 +335,8 @@ class EgoNetworkAnalyzer():
                 results.append(res)
         return results
         
-    
+    def export_to_pandas_df(self):
+        res = [val for key, val in self.networks_data.items()]
+        return pd.DataFrame(res)
+
+        
