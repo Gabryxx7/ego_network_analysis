@@ -26,7 +26,7 @@ Where the constraint C<sub>ij</sub> is the constraint between the node i and the
 
 P<sub>ij</sub> can be calculated as the normalized weight between node i and node j:
 
-<img src="https://latex.codecogs.com/png.image?\dpi{110}&space;\bg_white&space;\color{black}p_{ij}&space;=&space;\frac{z_{ij}}{\sum_{q&space;\in&space;N(q)}{z_{iq}}}&space;" title="\bg_white \color{black}p_{ij} = \frac{z_{ij}}{\sum_{q \in N(q)}{z_{iq}}} " />
+<img src="https://latex.codecogs.com/png.image?\dpi{110}&space;\bg_white&space;\bg_white&space;\color{black}&space;p_{ij}&space;=&space;\frac{z_{ij}}{\sum_{q&space;\in&space;N(i)}{z_{iq}}}&space;" title="\bg_white \bg_white \color{black} p_{ij} = \frac{z_{ij}}{\sum_{q \in N(i)}{z_{iq}}} " />
 
 Where Z<sub>ij</sub> is just the weight between node i and node j. If the graph is unweighted then Z<sub>ij</sub> is 1 if there exists an edge between i and j, 0 otherwise.
 
