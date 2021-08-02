@@ -32,7 +32,29 @@ Where Z<sub>ij</sub> is just the weight between node i and node j. If the graph 
 
 In this case I decided to calculate the edge's weight as the number of unique conversations two users share. For istance, imagine a user's WhatsApp where they have one on one conversations but also gorup conversations. If user A and user B are together in say 10 conversations, the weight of the edge between A and B would be 10.
 
+## Instructions
+Running the analyser is fairly simple:
+1. Open `analyse_data.py`
+2. Read your csv file in `pandas`
+3. Calculate the tie strength
+4. Pass the dataframe and the column names to the analyser object
+5. Run the analysis!
 
+## Metrics
+The analyser calculates a few default metrics:
+- Network degree: The number of nodes in the network
+- Edges: Number of edges in the network
+- Ego node degree: The degree of the ego node. Calculated as the number of edges connected to it if unweighted, otherwise it will be the sum of the edges' weights
+- Effective Size: See https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.structuralholes.effective_size.html
+- Constraints: See above
+- Ties and Simmelian ties: There are multiple type of ties: dyadic and triadic. I'm calculating all of them and then calculating the simmelian ties as the number of triads that include the ego
+
+## Parameters
+For large networks it might get slow which is why I tried to implement a multi threaded version. It seems to be working ok!
+Additionally you can also add some parameters:
+- `backboning`: This will filter out the network by using a disparity filter. Select your `alpha_threshold`, the default one i 0.04
+- If you don't provide a weight column the graph will be unweighted
+- `limit`: Sometimes you just want to test a few nodes' metrics, provide a limite > 0 to only calculate a few nodes' metrics
 
 ## References
 - https://faculty.ucr.edu/~hanneman/nettext/C9_Ego_networks.html
