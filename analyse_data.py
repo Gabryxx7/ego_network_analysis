@@ -12,7 +12,7 @@ from_col = "user_id_from"
 to_col = "user_id_to"
 
 analyzer = EgoNetworkAnalyzer(weighted_network, from_col, to_col, weight_col)
-results = analyzer.calculate_ego_networks_metrics(multi_thread=True, n_threads=23, limit=10)
+results = analyzer.calculate_ego_networks_metrics(multi_thread=True, n_threads=23, limit=-1, calc_simmelian=True, calc_constraints=True)
 # alpha_threshold = 0.1
 # results = multi_thread_network_metrics(weighted_network, from_col, to_col, weight_col)
 results_df = analyzer.export_to_pandas_df()

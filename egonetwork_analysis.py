@@ -45,6 +45,8 @@ class EgoNetworkAnalyzer():
         self.backboned = False
         self.alpha_threshold = alpha_threshold
         self.ego_radius = ego_radius
+        self.calc_simmelian = True
+        self.calc_constraints = True
 
     def make_full_network(self, backboning=False, alpha_threshold=0.04):  
         self.networks_data = {}
@@ -55,8 +57,7 @@ class EgoNetworkAnalyzer():
 
         self.networks_data[self.full_network_key] = {}
         self.networks_data[self.full_network_key]["network"] = full_network
-        self.networks_data[self.full_network_key]["total_nodes"] = full_network.number_of_nodes()
-        self.networks_data[self.full_network_key]["total_edges"] = full_network.number_of_edges()
+        self.networks_data[self.full_network_key].update(self.get_network_metrics(full_network))
 
         print(f"Full Network: nodes = {self.networks_data[self.full_network_key]['total_nodes']}, edges = {self.networks_data[self.full_network_key]['total_edges']}")
         if backboning:
@@ -72,6 +73,32 @@ class EgoNetworkAnalyzer():
 
         return self.networks_data
     
+    def get_network_metrics(self, network):
+        metrics = {}
+        metrics["total_nodes"] = network.number_of_nodes()
+        metrics["total_edges"] = network.number_of_edges()
+        metrics["average_clustering_weighted"] = nx.average_clustering(network, weight=self.weight_col)
+        metrics["average_clustering"] = nx.average_clustering(network)
+        metrics["average_degree"] = sum(dict(network.degree()).values())/metrics["total_nodes"]
+        metrics["density"] = nx.density(network)
+        metrics["triadic_closure"] = nx.transitivity(network)
+        metrics["average_shortest_path_length"] = nx.average_shortest_path_length(network)
+        try:
+            metrics["strongly_conn_comp"] = nx.number_strongly_connected_components(network)
+        except Exception:
+            pass
+        try:
+            metrics["weakly_conn_comp"] = nx.number_weakly_connected_components(network)
+        except Exception:
+            pass
+        try:
+            metrics["longest_path_length"] = nx.dag_longest_path_length(network)
+        except Exception:
+            pass
+            
+        
+        return metrics
+        
     @staticmethod
     def encrypt_df(df, key, cols_to_encrypt=None, method=0):
         if cols_to_encrypt is None:
@@ -110,10 +137,11 @@ class EgoNetworkAnalyzer():
     @staticmethod
     def encrypt_xor(raw, key):
         xored = EgoNetworkAnalyzer.xor(raw, key).encode('utf-8')
-        return str(base64.encodestring(xored).strip())[2:][:-1]
+        return base64.encodestring(xored).strip()
 
     @staticmethod
     def decrypt_xor(enc, key):
+        enc = enc[1:]
         enc = base64.decodestring(enc.encode('utf-8')).decode('utf-8')
         xored = EgoNetworkAnalyzer.xor(enc, key)
         return xored
@@ -143,8 +171,7 @@ class EgoNetworkAnalyzer():
             i +=1    
         return string
             
-    @staticmethod
-    def get_bidirectional_connections(G):
+    def get_bidirectional_connections(self, G):
         biconnections = set()
         for u, v in G.edges():
             if u > v:  # Avoid duplicates, such as (1, 2) and (2, 1)
@@ -153,8 +180,7 @@ class EgoNetworkAnalyzer():
                 biconnections.add((u, v))
         return biconnections
     
-    @staticmethod
-    def have_bidirectional_relationship(G, node1, node2):
+    def have_bidirectional_relationship(self, G, node1, node2):
         return G.has_edge(node1, node2) and G.has_edge(node2, node1)
 
     def print_bidirectional_connections(self, G):
@@ -180,8 +206,7 @@ class EgoNetworkAnalyzer():
             ego_net["network"] = nx.ego_graph(full_network, ego_node, undirected=True, radius=radius)
         else:
             ego_net["network"] = nx.ego_graph(full_network, ego_node, undirected=True, radius=radius, distance=self.weight_col)
-        ego_net["total_nodes"] = ego_net["network"].number_of_nodes()
-        ego_net["total_edges"] = ego_net["network"].number_of_edges()
+        ego_net.update(self.get_network_metrics(ego_net["network"]))
         ego_net["ego_node_degree"] = ego_net["network"].degree(ego_node)
         if self.weight_col is not None:
             ego_net["ego_node_degree_weighted"] = ego_net["network"].degree(ego_node, weight=self.weight_col)
@@ -247,13 +272,18 @@ class EgoNetworkAnalyzer():
         for index in triads_res:
             res["total"+str(index)+"_triads"] = len(triads_res[index])
             res["triads"+str(index)+"_ego"] = 0
+            simm_ties = {}
             for triad in triads_res[index]:
                 if ego in triad:
+                    for part in triad:
+                        simm_ties[part] = 1
     #                 print(f"Triad: \t{triad}m Ego:\t {ego}, Set: \t{index}")
                     res["triads"+str(index)+"_ego"] += 1   
             res["simmelian_ties"+str(index)] = -1
             if res["total"+str(index)+"_triads"]> 0:
-                res["simmelian_ties"+str(index)] =res["triads"+str(index)+"_ego"] / res["total"+str(index)+"_triads"]
+                res["simmelian_ties_ratio"+str(index)] = res["triads"+str(index)+"_ego"] / res["total"+str(index)+"_triads"]
+                res["simmelian_ties"+str(index)] = len(simm_ties)
+                
         return res
 
 
@@ -292,17 +322,21 @@ class EgoNetworkAnalyzer():
                 ego_network = self.networks_data[self.full_network_bb_key]["network"]
             else:
                 ego_network = self.networks_data[self.full_network_key]["network"]
-
+        
         ego_data = self.get_ego_network_data(ego_network, ego_node)
-        ties = self.calculate_simmelian_ties(ego_data)
-        ego_data.update(ties)
-        constraints = self.calculate_constraints(ego_data)
-        ego_data.update(constraints)
+        if self.calc_simmelian:
+            ties = self.calculate_simmelian_ties(ego_data)
+            ego_data.update(ties)
+        if self.calc_constraints:
+            constraints = self.calculate_constraints(ego_data)
+            ego_data.update(constraints)
         self.networks_data[ego_node] = ego_data            
         print(f'\n {utils.formatted_now(sepDate="-", sepTime=":", sep=" ")}\t COMPLETED ego network metrics calculation for \t {ego_node}')
         return ego_data
 
-    def calculate_ego_networks_metrics(self, backboning=False, multi_thread=True, n_threads=23, alpha_threshold=0.04, limit=-1):
+    def calculate_ego_networks_metrics(self, backboning=False, multi_thread=True, n_threads=23, alpha_threshold=0.04, limit=-1, calc_simmelian=True, calc_constraints=True):
+        self.calc_simmelian = calc_simmelian
+        self.calc_constraints = calc_constraints
         if self.networks_data is None:
             print(f'{utils.formatted_now(sepDate="-", sepTime=":", sep=" ")}\t Calculating full network first...')
             self.make_full_network(backboning, alpha_threshold)           
